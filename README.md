@@ -218,6 +218,7 @@ model-lineage-audit/
 │   ├── scoring.py       # Evidence scoring
 │   ├── report.py        # Report generation
 │   └── cli.py           # Command-line interface
+├── scripts/             # Example scripts
 ├── tests/               # Test suite
 ├── pyproject.toml       # Package configuration
 ├── LICENSE              # MIT License
