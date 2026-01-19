@@ -1,14 +1,24 @@
 # Model Lineage Audit (mlaudit)
 
-A forensic toolkit for detecting model lineage and provenance through weight similarity analysis.
+An analysis toolkit for assessing evidence of model lineage and provenance through weight similarity analysis.
+
+## Why I Built This
+
+I kept seeing the same problem: teams deploying models with no way to trace lineage when something went wrong. If a flaw is found in a training set or a dependency, how do you identify every model that inherited it? In regulated environments, "we're not sure" isn't an answer. It is meant to support investigation and response, not to replace legal or regulatory judgment.
+
+This is one piece of what I call the "Data DNA" layer—the traceability infrastructure that lets you quarantine a fleet of agents the moment you find a flaw in a shared dependency. You can't quarantine what you can't trace.
 
 ## Overview
 
-`mlaudit` helps answer the question: **"Is Model B derived from Model A?"**
+This project explores one aspect of model lineage: what can (and cannot) be inferred from weight-level similarity. It is designed for investigation and reasoning, not as a standalone authority on provenance.
+
+As AI models proliferate, a critical question emerges: how do you assess where a model came from? `mlaudit` approaches this with statistical rigor—not vibes.
+
+It helps answer the question: **"Is Model B derived from Model A?"**
 
 This is increasingly important for:
 - **AI Safety**: Detecting unauthorized model derivatives
-- **IP Protection**: Proving model provenance in disputes
+- **IP Protection**: Assessing evidence of lineage in disputes
 - **Compliance**: Verifying model origins for regulatory purposes
 - **Research**: Understanding fine-tuning dynamics and model evolution
 
@@ -78,7 +88,7 @@ Output:
 MODEL LINEAGE EVIDENCE REPORT
 ============================================================
 
-VERDICT: STRONG EVIDENCE
+EVIDENCE SUMMARY: STRONG (relative to baseline)
 Confidence: 94.2%
 
 ------------------------------------------------------------
@@ -137,7 +147,7 @@ null_dist = load_null_distribution("./null_distributions/llama_7b")
 # Compute evidence
 evidence = compute_evidence_scores(result, null_dist)
 
-print(f"Verdict: {evidence.verdict}")
+print(f"Evidence: {evidence.summary}")
 print(f"Confidence: {evidence.confidence:.1%}")
 
 # Per-layer evidence
@@ -179,7 +189,7 @@ High similarity alone **does not prove derivation**. You must compare against a 
 | < 50% | Normal range for independent models |
 | 50-90% | Somewhat unusual, worth investigating |
 | 90-99% | Unlikely by chance, suggests relationship |
-| > 99% | Very strong evidence of derivation |
+| > 99% | Very strong evidence of a relationship |
 
 ### Layer-wise Patterns
 
@@ -203,6 +213,7 @@ Different derivation methods leave different fingerprints:
 3. **Training data effects**: Models trained on similar data may be similar without derivation
 4. **Initialization effects**: Same initialization + different training can look similar early
 5. **Quantization artifacts**: Quantized models need careful handling
+6. **Not a complete safety solution**: This handles provenance, not runtime behavior. It tells you where a model came from, not what it's doing right now.
 
 ## Project Structure
 
