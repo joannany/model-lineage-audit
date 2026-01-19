@@ -49,7 +49,8 @@ def cosine_sim(a: torch.Tensor, b: torch.Tensor, eps: float = 1e-12) -> float:
     a_norm = torch.norm(a_flat) + eps
     b_norm = torch.norm(b_flat) + eps
 
-    return float(torch.dot(a_flat, b_flat) / (a_norm * b_norm))
+    cosine = torch.dot(a_flat, b_flat) / (a_norm * b_norm)
+    return float(torch.clamp(cosine, -1.0, 1.0))
 
 
 def rel_l2_symmetric(a: torch.Tensor, b: torch.Tensor, eps: float = 1e-12) -> float:
