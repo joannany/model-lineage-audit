@@ -4,7 +4,7 @@ An analysis toolkit for assessing evidence of model lineage and provenance throu
 
 ## Why I Built This
 
-I kept seeing the same problem: teams deploying models with no way to trace lineage when something went wrong. If a flaw is found in a training set or a dependency, how do you identify every model that inherited it? In regulated environments, "we're not sure" isn't an answer. It is meant to support investigation and response, not to replace legal or regulatory judgment.
+I kept seeing the same problem: teams deploying models with no way to trace lineage when something went wrong. If a flaw is found in a training set or a dependency, how do you identify every model that inherited it? In regulated environments, "we're not sure" isn't an answer. This is my attempt at a practical one.
 
 This is one piece of what I call the "Data DNA" layer—the traceability infrastructure that lets you quarantine a fleet of agents the moment you find a flaw in a shared dependency. You can't quarantine what you can't trace.
 
@@ -14,12 +14,12 @@ This project explores one aspect of model lineage: what can (and cannot) be infe
 
 As AI models proliferate, a critical question emerges: how do you assess where a model came from? `mlaudit` approaches this with statistical rigor—not vibes.
 
-It helps answer the question: **"Is Model B derived from Model A?"**
+It helps assess the question: **"Is Model B likely to be derived from Model A?"**
 
 This is increasingly important for:
-- **AI Safety**: Detecting unauthorized model derivatives
+- **AI Safety**: Identifying unauthorized or unintended model reuse
 - **IP Protection**: Assessing evidence of lineage in disputes
-- **Compliance**: Verifying model origins for regulatory purposes
+- **Compliance**: Supporting provenance verification in regulated settings
 - **Research**: Understanding fine-tuning dynamics and model evolution
 
 ## Features
@@ -27,8 +27,8 @@ This is increasingly important for:
 - **Multi-metric comparison**: Cosine similarity, CKA, spectral analysis, relative L2
 - **Architecture-aware grouping**: Layer and module-level analysis
 - **Null distribution benchmarking**: Statistical baselines from independent models
-- **Evidence scoring**: Principled inference with percentiles and z-scores
-- **Comprehensive reporting**: CSV, plots, markdown reports
+- **Evidence scoring**: Contextualized inference with percentiles and z-scores
+- **Comprehensive reporting**: CSV outputs, plots, and markdown summaries
 
 ## Installation
 
@@ -38,7 +38,8 @@ cd model-lineage-audit
 pip install -e .
 ```
 
-Or install with dev dependencies:
+Or install with development dependencies:
+
 ```bash
 pip install -e ".[dev]"
 ```
@@ -60,11 +61,11 @@ This generates:
 - `raw_tensor_metrics.csv`: Per-tensor similarity scores
 - `by_layer.csv`, `by_module.csv`: Aggregated profiles
 - `layer_profile_*.png`: Similarity visualizations
-- `REPORT.md`: Human-readable summary
+- `REPORT.md`: Human-readable evidence summary
 
 ### Build a Null Distribution
 
-To make statistical claims about lineage, you need a baseline of what similarity looks like between **unrelated** models:
+To contextualize observed similarity, you can build a baseline from unrelated models of the same architecture:
 
 ```bash
 mlaudit build-null \
@@ -73,7 +74,7 @@ mlaudit build-null \
   --architecture llama-7b
 ```
 
-### Score Against Null Distribution
+### Score Against a Null Distribution
 
 ```bash
 mlaudit score \
@@ -83,6 +84,7 @@ mlaudit score \
 ```
 
 Output:
+
 ```
 ============================================================
 MODEL LINEAGE EVIDENCE REPORT
@@ -111,22 +113,16 @@ mlaudit info --model /path/to/model.safetensors --list-keys
 ```python
 from mlaudit import load_state, compare_state_dicts, CompareConfig
 
-# Load models
 state_a = load_state("modelA.safetensors")
 state_b = load_state("modelB.safetensors")
 
-# Compare
 result = compare_state_dicts(
     state_a.tensors,
     state_b.tensors,
     CompareConfig(grouping="llama", compute_cka=True)
 )
 
-# Get summary
 print(result.global_summary())
-# {'weighted_mean_cosine': 0.9847, 'weighted_mean_rel_l2': 0.0312, ...}
-
-# Access layer profiles
 print(result.profiles["by_layer"])
 ```
 
@@ -138,119 +134,122 @@ from mlaudit import (
     load_null_distribution, compute_evidence_scores
 )
 
-# Compare models
 result = compare_state_dicts(state_a.tensors, state_b.tensors)
-
-# Load null distribution
 null_dist = load_null_distribution("./null_distributions/llama_7b")
 
-# Compute evidence
 evidence = compute_evidence_scores(result, null_dist)
 
 print(f"Evidence: {evidence.summary}")
 print(f"Confidence: {evidence.confidence:.1%}")
 
-# Per-layer evidence
 for layer in evidence.by_layer:
-    print(f"{layer.layer}: cosine={layer.cosine_obs:.4f}, "
-          f"percentile={layer.cosine_pct:.1f}%")
+    print(
+        f"{layer.layer}: cosine={layer.cosine_obs:.4f}, "
+        f"percentile={layer.cosine_pct:.1f}%"
+    )
 ```
 
 ## Metrics Explained
 
 ### Cosine Similarity
+
 Measures the angle between flattened weight vectors. Values range from -1 to 1:
 - **1.0**: Identical direction (weights proportional)
 - **0.0**: Orthogonal
 - **-1.0**: Opposite direction
 
+Results are clamped to [-1, 1] to handle floating-point edge cases with near-identical vectors.
+
 ### Relative L2 (Symmetric)
+
 Measures the relative magnitude of difference:
+
 ```
 rel_l2 = ||a - b|| / ((||a|| + ||b||) / 2)
 ```
+
 - **0.0**: Identical weights
 - **Larger**: More different
 
 ### CKA (Centered Kernel Alignment)
+
 Measures structural similarity invariant to scaling and rotation. Useful for comparing representations across architectures. Uses unbiased Gram centering (Kornblith et al., 2019).
 
 ### Spectral Similarity
-Compares singular value spectra. Captures structural properties that are invariant to orthogonal transformations.
+
+Compares singular value spectra, capturing structural properties invariant to orthogonal transformations.
 
 ## Interpretation Guide
 
 ### What High Similarity Means
 
-High similarity alone **does not prove derivation**. You must compare against a null distribution:
+High similarity alone does not prove derivation. It must be interpreted relative to a null distribution:
 
 | Percentile | Interpretation |
 |------------|----------------|
-| < 50% | Normal range for independent models |
-| 50-90% | Somewhat unusual, worth investigating |
-| 90-99% | Unlikely by chance, suggests relationship |
-| > 99% | Very strong evidence of a relationship |
+| < 50% | Typical for independent models |
+| 50–90% | Unusual, worth investigating |
+| 90–99% | Unlikely by chance, suggests a relationship |
+| > 99% | Very strong evidence of a shared origin |
 
 ### Layer-wise Patterns
 
-Different derivation methods leave different fingerprints:
+Different reuse patterns leave different fingerprints:
 
-- **Full fine-tuning**: All layers modified, but relative similarity preserved
-- **LoRA/adapters**: Base layers identical, adapter layers different
+- **Full fine-tuning**: All layers modified, relative similarity preserved
+- **LoRA / adapters**: Base layers identical, adapter layers distinct
 - **Pruning**: Increased sparsity, similar structure
-- **Quantization**: Systematic perturbation, high cosine despite numerical differences
+- **Quantization**: High cosine despite numerical perturbations
 
 ### Module-wise Patterns
 
 - **Attention weights** often diverge more during fine-tuning
-- **MLP weights** may stay more similar
-- **LayerNorm** typically has high similarity even between independent models
+- **MLP weights** may remain more stable
+- **LayerNorm** parameters are often similar even across independent models
 
 ## Limitations
 
-1. **No behavioral analysis**: Weight similarity doesn't capture output changes
-2. **Architecture dependence**: Can only compare same-architecture models
-3. **Training data effects**: Models trained on similar data may be similar without derivation
-4. **Initialization effects**: Same initialization + different training can look similar early
-5. **Quantization artifacts**: Quantized models need careful handling
-6. **Not a complete safety solution**: This handles provenance, not runtime behavior. It tells you where a model came from, not what it's doing right now.
+1. **No behavioral analysis**: Weight similarity does not capture output behavior
+2. **Architecture dependence**: Only same-architecture models are comparable
+3. **Training data effects**: Shared data can induce similarity without derivation
+4. **Initialization effects**: Shared initialization can mask divergence early
+5. **Quantization artifacts**: Require careful handling
+6. **Not a complete safety solution**: This addresses provenance, not runtime behavior
 
 ## Project Structure
 
 ```
 model-lineage-audit/
 ├── src/mlaudit/
-│   ├── __init__.py      # Package exports
-│   ├── io.py            # Checkpoint loading
-│   ├── groupings.py     # Architecture-aware key grouping
-│   ├── metrics.py       # Similarity metrics (cosine, CKA, etc.)
-│   ├── compare.py       # Pairwise comparison
-│   ├── nulls.py         # Null distribution building
-│   ├── scoring.py       # Evidence scoring
-│   ├── report.py        # Report generation
-│   └── cli.py           # Command-line interface
-├── scripts/             # Example scripts
-├── tests/               # Test suite
-├── pyproject.toml       # Package configuration
-├── LICENSE              # MIT License
+│   ├── __init__.py
+│   ├── io.py
+│   ├── groupings.py
+│   ├── metrics.py
+│   ├── compare.py
+│   ├── nulls.py
+│   ├── scoring.py
+│   ├── report.py
+│   └── cli.py
+├── scripts/
+├── tests/
+├── pyproject.toml
+├── LICENSE
 └── README.md
 ```
 
 ## Contributing
 
-Contributions welcome! Areas of interest:
-- Pre-built null distributions for common architectures
-- Additional metrics (e.g., representation similarity)
-- Activation-based comparison (beyond weight analysis)
+Contributions are welcome, particularly around:
+- Baseline distributions for common architectures
+- Additional similarity metrics
+- Activation-based analysis
 - Integration with model registries
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE).
 
 ## Citation
-
-If you use this tool in research, please cite:
 
 ```bibtex
 @software{jo_2026_mlaudit,
@@ -264,6 +263,6 @@ If you use this tool in research, please cite:
 ## Acknowledgments
 
 Inspired by:
-- [CKA paper](https://arxiv.org/abs/1905.00414) (Kornblith et al., 2019)
+- [Kornblith et al., Similarity of Neural Network Representations (2019)](https://arxiv.org/abs/1905.00414)
 - Model provenance research in AI safety
-- Open-source LLM ecosystem
+- The open-source LLM ecosystem
